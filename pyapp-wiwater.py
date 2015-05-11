@@ -20,6 +20,8 @@ print(ser.name)
 print('---------------------------------------------------')
 
 resetedServer = True
+nodes = []
+
 
 print('Capturas?')
 times = input()
@@ -37,34 +39,34 @@ while True:
         #convert flow value (string) to int to manipulate after
         key_value['flow'] = int(key_value['flow'])
             
+        #detectar nuevo nodo y crear en DB
+        nodeAddr = key_value.get('node')
+        if nodeAddr not in nodes:
+            nodes.append(nodeAddr)
+            db.sensors.insert({"place":nodeAddr},{"flow":0})
+            flowToInc = 1
+        else:
+            if nodeAddr == '01':
+                if resetedServer == True:
+                    flowToInc = 1
+                    oldFlow_01 = key_value.get('flow')
+                else:
+                    newFlow_01 = key_value.get('flow')
+                    flowToInc = newFlow_01 - oldFlow_01
+                    oldFlow_01 = newFlow_01
+                    resetedServer = False
 
-        #determine node and flow to inc
-        if key_value.get('node') == '01':
-            nodeToInc = 'Garden'
+            elif nodeAddr == '02':
+                if resetedServer == True:
+                    flowToInc = 1
+                    oldFlow_02 = key_value.get('flow')
+                else:
+                    newFlow_02 = key_value.get('flow')
+                    flowToInc = newFlow_02 - oldFlow_02
+                    oldFlow_02 = newFlow_02
+                    resetedServer = False
             
-            if resetedServer == True:
-                flowToInc = 1
-                oldFlow_01 = key_value.get('flow')
-            else:
-                newFlow_01 = key_value.get('flow')
-                flowToInc = newFlow_01 - oldFlow_01
-                oldFlow_01 = newFlow_01
-                resetedServer = False
-
-        elif key_value.get('node') == '02':
-            nodeToInc = 'Shower'
-
-            if resetedServer == True:
-                flowToInc = 1
-                oldFlow_02 = key_value.get('flow')
-            else:
-                newFlow_02 = key_value.get('flow')
-                flowToInc = newFlow_02 - oldFlow_02
-                oldFlow_02 = newFlow_02
-                resetedServer = False
-            
-        
-        db.sensors.update({"place":nodeToInc},{"$inc":{"flow":flowToInc}})
+        db.sensors.update({"place":nodeAddr},{"$inc":{"flow":flowToInc}})
         print(key_value)
         print(flowToInc)
             
