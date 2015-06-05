@@ -13,19 +13,27 @@ db = client.meteor
 collections = str(db.collection_names())
 print('Colecciones disponibles: ' + collections)
 print('---------------------------------------------------')
+#Recovery nodes' address in "nodesInMongo" list
+nodesInMongo = []
+cursor = db.sensors.find({},{"node":1,"_id":0})
+for record in cursor:
+    nodesInMongo.append(record["node"])
+print('Nodes in mongo:',nodesInMongo)
 
+
+#Conectarse al puerto serie
 print('Buscando puerto... ')
 ser = serial.Serial('/dev/ttyACM0', 9600)
 print(ser.name)
 print('---------------------------------------------------')
 
 resetedServer = True
-nodes = []
-
+oldFlows = {}
 
 print('Capturas?')
 times = input()
 times = int(times)
+
 
 while True:
     if times != 0:
@@ -33,44 +41,38 @@ while True:
         #read, decode binary to string and remove whitespace characters (\r\n)
         line = ser.readline().decode('ascii').strip()
 
-        #convert string to python dictionary (key/value pairs)
-        key_value = dict(u.split(":") for u in line.split(","))
+        if line == 'ED Joined':
+            print(line)
+            times += 1
 
-        #convert flow value (string) to int to manipulate after
-        key_value['flow'] = int(key_value['flow'])
-            
-        #detectar nuevo nodo y crear en DB
-        nodeAddr = key_value.get('node')
-        if nodeAddr not in nodes:
-            nodes.append(nodeAddr)
-            db.sensors.insert({"place":nodeAddr},{"flow":0})
-            flowToInc = 1
         else:
-            if nodeAddr == '01':
-                if resetedServer == True:
-                    flowToInc = 1
-                    oldFlow_01 = key_value.get('flow')
-                else:
-                    newFlow_01 = key_value.get('flow')
-                    flowToInc = newFlow_01 - oldFlow_01
-                    oldFlow_01 = newFlow_01
-                    resetedServer = False
 
-            elif nodeAddr == '02':
-                if resetedServer == True:
+            #convert string to python dictionary (key/value pairs)
+            key_value = dict(u.split(":") for u in line.split(","))
+
+            #convert flow value (string) to int to manipulate after
+            key_value['flow'] = int(key_value['flow'])
+            
+            nodeAddrInput = key_value.get('node')
+            nodeFlowInput = key_value.get('flow')
+        
+            if nodeAddrInput in nodesInMongo:
+                old = db.sensors.find_one({"node":nodeAddrInput},{"ofid":1,"_id":0})
+                old = old["ofid"]
+                flowToInc = nodeFlowInput - old
+                if flowToInc < 0:
                     flowToInc = 1
-                    oldFlow_02 = key_value.get('flow')
-                else:
-                    newFlow_02 = key_value.get('flow')
-                    flowToInc = newFlow_02 - oldFlow_02
-                    oldFlow_02 = newFlow_02
-                    resetedServer = False
+            else:
+                db.sensors.insert({"node":nodeAddrInput ,"flow":0, "ofid":nodeFlowInput})
+                nodesInMongo.append(nodeAddrInput)
+                flowToInc = 1
+                    
+            oldFlows[nodeAddrInput] = nodeFlowInput
+            db.sensors.update({"node":nodeAddrInput},{"$inc":{"flow":flowToInc},"$set":{"ofid":nodeFlowInput}})
+            print(key_value)
             
-        db.sensors.update({"place":nodeAddr},{"$inc":{"flow":flowToInc}})
-        print(key_value)
-        print(flowToInc)
-            
-        times = times - 1
+            times = times - 1
+        
     else:
         print('Repetir? (y/n)')
         kb = input()
